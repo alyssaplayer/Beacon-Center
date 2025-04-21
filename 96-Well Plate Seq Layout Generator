@@ -1,0 +1,137 @@
+function create96WellGrid() {
+  // Get the active spreadsheet
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Get the sheet where you want to create the 96-well grid (e.g., "96-Well plate")
+  var sheet = spreadsheet.getSheetByName("96-Well plate");
+  
+  // Clear any previous data
+  sheet.clear();
+  
+  // Set up the grid dimensions (8 rows x 12 columns = 96 wells)
+  var rows = 8;
+  var cols = 12;
+
+  // Define row and column labels
+  var rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  var colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11','12'];
+
+  // Create the well grid (for the first grid starting at A1)
+  createGrid(sheet, 2, 2, rows, cols, rowLabels, colLabels); // Start from A2 for first grid
+
+  // Create the well grid (for the second grid starting at A11)
+  createGrid(sheet, 12, 2, rows, cols, rowLabels, colLabels); // Start from A11 for second grid
+
+  // Call the function to populate the first grid with data from HCs sheet
+  populate96WellGrid(sheet, 2, 2, "HCs");  // Populate first grid (starting from A2)
+
+  // Call the function to populate the second grid with data from LCs sheet
+  populate96WellGrid(sheet, 12, 2, "LCs");  // Populate second grid (starting from A11)
+}
+
+function createGrid(sheet, startRow, startCol, rows, cols, rowLabels, colLabels) {
+  // Create the well grid (rows and columns) starting from (startRow, startCol)
+  var cellWidth = 50; // Set column width for a better "plate" appearance
+  var cellHeight = 50; // Set row height for a better "plate" appearance
+
+  // Adjust the row and column sizes
+  for (var i = 0; i < cols; i++) {
+    sheet.setColumnWidth(startCol + i, cellWidth);
+  }
+  
+  for (var j = 0; j < rows; j++) {
+    sheet.setRowHeight(startRow + j, cellHeight);
+  }
+
+  // Populate column headers (1 to 12) for the grid
+  for (var col = 0; col < colLabels.length; col++) {
+    sheet.getRange(startRow - 1, startCol + col).setValue(colLabels[col]);
+    sheet.getRange(startRow - 1, startCol + col).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  }
+
+  // Populate row labels (A to H) for the grid
+  for (var row = 0; row < rowLabels.length; row++) {
+    sheet.getRange(startRow + row, startCol - 1).setValue(rowLabels[row]);
+    sheet.getRange(startRow + row, startCol - 1).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  }
+  
+  // Populate wells (A1, A2, ..., H12) with empty values
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      sheet.getRange(startRow + row, startCol + col).setValue('');
+      sheet.getRange(startRow + row, startCol + col).setHorizontalAlignment('center').setVerticalAlignment('middle');
+      sheet.getRange(startRow + row, startCol + col).setBackground('#FFFFFF'); // Default color (white)
+    }
+  }
+
+  // Add borders to all cells to make it look like a 96-well plate
+  var range = sheet.getRange(startRow, startCol, rows, cols);
+  range.setBorder(true, true, true, true, true, true);
+}
+
+function fetchDataFromSheet(sheetName) {
+  // Get the active spreadsheet and the target sheet (either "HCs" or "LCs")
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var dataSheet = spreadsheet.getSheetByName(sheetName);
+  
+  // Get the values from columns A and J (from row 2 to the last row with data)
+  var dataA = dataSheet.getRange('A2:A' + dataSheet.getLastRow()).getValues();  // Data from column A
+  var dataJ = dataSheet.getRange('J2:J' + dataSheet.getLastRow()).getValues();  // Data from column J
+  
+  // Combine the data from columns A and J into a 2D array
+  var combinedData = [];
+  for (var i = 0; i < dataA.length; i++) {
+    combinedData.push([dataA[i][0], dataJ[i][0]]);
+  }
+  
+  // Log combinedData to see what we have
+  Logger.log(combinedData);
+  
+  return combinedData;
+}
+
+function populate96WellGrid(sheet, startRow, startCol, sheetName) {
+  // Fetch combined data from the specified sheet (either "HCs" or "LCs")
+  var combinedData = fetchDataFromSheet(sheetName);
+  
+  var rows = 8;
+  var cols = 12;
+  
+  var wellIndex = 0;  // Keep track of which item in combinedData we're placing in the grid
+
+  // Loop through the wells and populate data from the combinedData array
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      if (wellIndex < combinedData.length) {
+        // Place the data from combinedData into the well
+        sheet.getRange(startRow + row, startCol + col).setValue(combinedData[wellIndex][0]);  // Column A data
+        sheet.getRange(startRow + row, startCol + col).setBackground('#D3D3D3');  // Optional color for populated wells
+        
+        // Apply conditional formatting based on Column J value
+        applyConditionalFormatting(sheet, startRow + row, startCol + col, combinedData[wellIndex][1]);
+        
+        wellIndex++;
+      }
+    }
+  }
+}
+
+function applyConditionalFormatting(sheet, row, col, status) {
+  // Set colors based on status (from column J of the HCs or LCs sheet)
+  var backgroundColor = '#FFFFFF';  // Default to white
+  
+  if (status === 'Useable Sequence') {
+    backgroundColor = '#90EE90';  // Light Green for "Useable Seq"
+  } else if (status === 'Failure') {
+    backgroundColor = '#c5c9c5';  // Grey for "Failure"
+  } else if (status === 'Edited') {
+    backgroundColor = '#97c4d1';  // Blue for "Edited Useable"
+  } else if (status === 'Repetitive') {
+    backgroundColor = '#ffbb54';  // Orange for "Repetitive"
+  } else if (status === 'Blank') {
+    backgroundColor = '#ffffff';  // Orange for "Repetitive"
+  }
+
+  // Apply the background color to the well
+  sheet.getRange(row, col).setBackground(backgroundColor);
+}
