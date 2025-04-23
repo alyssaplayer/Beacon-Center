@@ -1,0 +1,144 @@
+function create96WellGrid() {
+  // Get the active spreadsheet
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Get the sheet where you want to create the 96-well grid (e.g., "96-Well plate")
+  var sheet = spreadsheet.getSheetByName("Labeling");
+  
+  // Clear any previous data
+  sheet.clear();
+  
+  // Set up the grid dimensions (8 rows x 12 columns = 96 wells)
+  var rows = 8;
+  var cols = 12;
+
+  // Define row and column labels
+  var rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  var colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11','12'];
+
+  // Create the well grid (for the first grid starting at row 11, column 2)
+  createGrid(sheet, 11, 2, rows, cols, rowLabels, colLabels); // Start from B11 (A11 is row header)
+
+  // Call the function to populate the 96-well plate with data from antigen labeling table
+  populate96WellGrid(sheet, 11, 2, "temporary layout sheet");  // Populate grid (starting from B11)
+}
+
+function createGrid(sheet, startRow, startCol, rows, cols, rowLabels, colLabels) {
+  // Create the well grid (rows and columns) starting from (startRow, startCol)
+  var cellWidth = 50; // Set column width for a better plate appearance
+  var cellHeight = 50; // Set row height for a better plate appearance
+
+  // Adjust the column widths
+  for (var i = 0; i < cols; i++) {
+    sheet.setColumnWidth(startCol + i, cellWidth);
+  }
+
+  // Adjust the row heights
+  for (var j = 0; j < rows; j++) {
+    sheet.setRowHeight(startRow + j, cellHeight);
+  }
+
+  // Populate column headers (1 to 12)
+  for (var col = 0; col < colLabels.length; col++) {
+    sheet.getRange(startRow - 1, startCol + col).setValue(colLabels[col]);
+    sheet.getRange(startRow - 1, startCol + col).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  }
+
+  // Populate row labels (A to H)
+  for (var row = 0; row < rowLabels.length; row++) {
+    sheet.getRange(startRow + row, startCol - 1).setValue(rowLabels[row]);
+    sheet.getRange(startRow + row, startCol - 1).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  }
+  
+  // Populate wells (A1, A2, ..., H12) with empty values and default formatting
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      sheet.getRange(startRow + row, startCol + col).setValue('');
+      sheet.getRange(startRow + row, startCol + col).setHorizontalAlignment('center').setVerticalAlignment('middle');
+      sheet.getRange(startRow + row, startCol + col).setBackground('#FFFFFF'); // Default color (white)
+    }
+  }
+
+  // Add borders to all cells to make it look like a 96-well plate
+  var range = sheet.getRange(startRow, startCol, rows, cols);
+  range.setBorder(true, true, true, true, true, true);
+}
+
+function fetchDataFromSheet(sheetName) {
+  // Get the active spreadsheet and the target sheet (either "HCs" or "LCs")
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var dataSheet = spreadsheet.getSheetByName(sheetName);
+
+  // Guard clause in case the sheet doesn't exist
+  if (!dataSheet) {
+    throw new Error("Sheet '" + sheetName + "' not found.");
+  }
+
+  // Retrieve concentration from columns B and D of sheet (from row 2 and 4 to last data row)
+  var lastRowB = dataSheet.getRange("B:B").getLastRow();
+  var lastRowD = dataSheet.getRange("D:D").getLastRow();
+
+  var dataB = dataSheet.getRange(2, 2, lastRowB - 1).getValues();  // Column B from row 2
+  var dataD = dataSheet.getRange(4, 4, lastRowD - 3).getValues();  // Column D from row 4
+
+  // Combine the data into a 2D array
+  var maxLength = Math.max(dataB.length, dataD.length);
+  var combinedData = [];
+
+  for (var i = 0; i < maxLength; i++) {
+    combinedData.push([
+      dataB[i] ? dataB[i][0] : '',  // Handle empty values
+      dataD[i] ? dataD[i][0] : ''
+    ]);
+  }
+
+  // Log combinedData to see what we have
+  Logger.log(combinedData);
+  return combinedData;
+}
+
+function populate96WellGrid(sheet, startRow, startCol, sheetName) {
+  // Fetch combined data from the specified sheet (either "HCs" or "LCs")
+  var combinedData = fetchDataFromSheet(sheetName);
+  
+  var rows = 8;
+  var cols = 12;
+  var wellIndex = 0;  // Keep track of which item in combinedData we're placing in the grid
+
+  // Loop through the wells and populate data from the combinedData array
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      if (wellIndex < combinedData.length) {
+        // Place the data from combinedData into the well
+        sheet.getRange(startRow + row, startCol + col).setValue(combinedData[wellIndex][0]);  // Column B data
+        sheet.getRange(startRow + row, startCol + col).setBackground('#D3D3D3');  // Optional gray background for populated wells
+        
+        // Apply conditional formatting based on Column D value
+        applyConditionalFormatting(sheet, startRow + row, startCol + col, combinedData[wellIndex][1]);
+        
+        wellIndex++;
+      }
+    }
+  }
+}
+
+// Conditional formatting for each well based on the fluorophore code (column D of source sheet)
+function applyConditionalFormatting(sheet, row, col, status) {
+  // Set colors based on status (from column D of the source sheet)
+  var backgroundColor = '#FFFFFF';  // Default to white
+
+  if (status === '594') {
+    backgroundColor = '#FFB3B3';  // Red for Texas Red
+  } else if (status === '680') {
+    backgroundColor = '#FFB6C1';  // Pink for Cy5
+  } else if (status === '555') {
+    backgroundColor = '#FFFFC5';  // Yellow for PE
+  } else if (status === '421') {
+    backgroundColor = '#C9A0DC';  // Purple for UV
+  } else if (status === '488') {
+    backgroundColor = '#90EE90';  // Green for FITC
+  }
+
+  // Apply the background color to the well
+  sheet.getRange(row, col).setBackground(backgroundColor);
+}
